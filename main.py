@@ -111,6 +111,34 @@ def add_version_metrics(args, messages):
         logging.exception("failed to get os version")
 
 
+def add_provision_metrics(args, messages):
+    logging.info("collecting system provision metrics")
+    timestamp = time.time_ns()
+    try:
+        # check the last line is a complete factory provision log
+        lastline = (
+            Path("/host/etc/waggle/factory_provision")
+            .read_text()
+            .strip()
+            .rsplit("\n", 1)[1]
+        )
+        if "Factory Provisioning Finish" in lastline:
+            date = lastline.rsplit(":", 1)[0]
+            messages.append(
+                message.Message(
+                    name="sys.provision.factory_date",
+                    value=date,
+                    timestamp=timestamp,
+                    meta={},
+                )
+            )
+        logging.info("added factory provision date")
+    except FileNotFoundError:
+        logging.info("factory provision not found, skipping...")
+    except Exception:
+        logging.exception("failed to get factory provision")
+
+
 def add_metrics_data_dir(args, messages):
     for path in args.metrics_data_dir.glob("*/*"):
         if path.name.startswith("."):
@@ -255,6 +283,7 @@ def main():
 
     logging.info("collecting one time startup metrics")
     add_version_metrics(args, messages)
+    add_provision_metrics(args, messages)
 
     logging.info("collecting metrics every %s seconds", args.metrics_collect_interval)
 
