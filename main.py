@@ -61,12 +61,14 @@ def add_system_metrics(args, messages):
             except KeyError:
                 continue
 
-            messages.append(message.Message(
-                name=name,
-                value=sample.value,
-                timestamp=timestamp,
-                meta=sample.labels,
-            ))
+            messages.append(
+                message.Message(
+                    name=name,
+                    value=sample.value,
+                    timestamp=timestamp,
+                    meta=sample.labels,
+                )
+            )
 
 
 def add_uptime_metrics(args, messages):
@@ -74,12 +76,14 @@ def add_uptime_metrics(args, messages):
     timestamp = time.time_ns()
     try:
         uptime = get_uptime_seconds()
-        messages.append(message.Message(
-            name="sys.uptime",
-            value=uptime,
-            timestamp=timestamp,
-            meta={},
-        ))
+        messages.append(
+            message.Message(
+                name="sys.uptime",
+                value=uptime,
+                timestamp=timestamp,
+                meta={},
+            )
+        )
     except FileNotFoundError:
         logging.warning("could not access /host/proc/uptime")
     except Exception:
@@ -92,12 +96,14 @@ def add_version_metrics(args, messages):
 
     try:
         version = Path("/host/etc/waggle_version_os").read_text().strip()
-        messages.append(message.Message(
-            name="sys.version.os",
-            value=version,
-            timestamp=timestamp,
-            meta={},
-        ))
+        messages.append(
+            message.Message(
+                name="sys.version.os",
+                value=version,
+                timestamp=timestamp,
+                meta={},
+            )
+        )
         logging.info("added os version")
     except FileNotFoundError:
         logging.info("os version not found. skipping...")
@@ -138,7 +144,12 @@ def flush_messages_to_rabbitmq(args, messages):
         socket_timeout=3.0,
     )
 
-    logging.info("publishing metrics to rabbitmq server at %s:%d as %s", params.host, params.port, params.credentials.username)
+    logging.info(
+        "publishing metrics to rabbitmq server at %s:%d as %s",
+        params.host,
+        params.port,
+        params.credentials.username,
+    )
 
     published_total = 0
 
@@ -153,14 +164,18 @@ def flush_messages_to_rabbitmq(args, messages):
                 if args.waggle_node_vsn != "":
                     msg.meta["vsn"] = args.waggle_node_vsn
                 # add to rabbitmq queue
-                channel.basic_publish(exchange=args.rabbitmq_exchange,
-                                        routing_key=msg.name,
-                                        body=message.dump(msg))
+                channel.basic_publish(
+                    exchange=args.rabbitmq_exchange,
+                    routing_key=msg.name,
+                    body=message.dump(msg),
+                )
                 # dequeue message *after* it has been published to rabbtimq
                 messages.popleft()
                 published_total += 1
     except Exception:
-        logging.warning("rabbitmq connection failed. %d metrics buffered for retry", len(messages))
+        logging.warning(
+            "rabbitmq connection failed. %d metrics buffered for retry", len(messages)
+        )
 
     logging.info("published %d metrics", published_total)
 
@@ -168,24 +183,71 @@ def flush_messages_to_rabbitmq(args, messages):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="enable debug logs")
-    parser.add_argument('--waggle-node-id', default=getenv('WAGGLE_NODE_ID', '0000000000000000'), help='waggle node id')
-    parser.add_argument('--waggle-node-vsn', default=getenv('WAGGLE_NODE_VSN', ''), help='waggle node vsn')
-    parser.add_argument('--waggle-host-id', default=getenv('WAGGLE_HOST_ID', ''), help='waggle host id')
-    parser.add_argument('--rabbitmq-host', default=getenv('RABBITMQ_HOST', 'localhost'), help='rabbitmq host')
-    parser.add_argument('--rabbitmq-port', default=int(getenv('RABBITMQ_PORT', '5672')), type=int, help='rabbitmq port')
-    parser.add_argument('--rabbitmq-username', default=getenv('RABBITMQ_USERNAME', 'guest'), help='rabbitmq username')
-    parser.add_argument('--rabbitmq-password', default=getenv('RABBITMQ_PASSWORD', 'guest'), help='rabbitmq password')
-    parser.add_argument('--rabbitmq-exchange', default=getenv('RABBITMQ_EXCHANGE', 'metrics'), help='rabbitmq exchange to publish to')
-    parser.add_argument('--metrics-url', default=getenv("METRICS_URL", "http://localhost:9100/metrics"), help='node exporter metrics url')
-    parser.add_argument('--metrics-collect-interval', default=float(getenv("METRICS_COLLECT_INTERVAL", "60.0")), type=float, help='interval in seconds to collect metrics')
-    parser.add_argument('--metrics-data-dir', default=getenv("METRICS_DATA_DIR", "/run/metrics"), type=Path, help='metrics data directory')
+    parser.add_argument(
+        "--waggle-node-id",
+        default=getenv("WAGGLE_NODE_ID", "0000000000000000"),
+        help="waggle node id",
+    )
+    parser.add_argument(
+        "--waggle-node-vsn",
+        default=getenv("WAGGLE_NODE_VSN", ""),
+        help="waggle node vsn",
+    )
+    parser.add_argument(
+        "--waggle-host-id", default=getenv("WAGGLE_HOST_ID", ""), help="waggle host id"
+    )
+    parser.add_argument(
+        "--rabbitmq-host",
+        default=getenv("RABBITMQ_HOST", "localhost"),
+        help="rabbitmq host",
+    )
+    parser.add_argument(
+        "--rabbitmq-port",
+        default=int(getenv("RABBITMQ_PORT", "5672")),
+        type=int,
+        help="rabbitmq port",
+    )
+    parser.add_argument(
+        "--rabbitmq-username",
+        default=getenv("RABBITMQ_USERNAME", "guest"),
+        help="rabbitmq username",
+    )
+    parser.add_argument(
+        "--rabbitmq-password",
+        default=getenv("RABBITMQ_PASSWORD", "guest"),
+        help="rabbitmq password",
+    )
+    parser.add_argument(
+        "--rabbitmq-exchange",
+        default=getenv("RABBITMQ_EXCHANGE", "metrics"),
+        help="rabbitmq exchange to publish to",
+    )
+    parser.add_argument(
+        "--metrics-url",
+        default=getenv("METRICS_URL", "http://localhost:9100/metrics"),
+        help="node exporter metrics url",
+    )
+    parser.add_argument(
+        "--metrics-collect-interval",
+        default=float(getenv("METRICS_COLLECT_INTERVAL", "60.0")),
+        type=float,
+        help="interval in seconds to collect metrics",
+    )
+    parser.add_argument(
+        "--metrics-data-dir",
+        default=getenv("METRICS_DATA_DIR", "/run/metrics"),
+        type=Path,
+        help="metrics data directory",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
-                        format="%(asctime)s %(message)s",
-                        datefmt="%Y/%m/%d %H:%M:%S")
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%Y/%m/%d %H:%M:%S",
+    )
     # pika logging is too verbose, so we turn it down.
-    logging.getLogger('pika').setLevel(logging.CRITICAL)
+    logging.getLogger("pika").setLevel(logging.CRITICAL)
 
     logging.info("metrics agent started on %s", args.waggle_host_id)
 
