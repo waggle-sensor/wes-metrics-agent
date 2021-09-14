@@ -7,8 +7,6 @@ import logging
 from waggle import message
 from os import getenv
 import pika
-import socket
-import subprocess
 from collections import deque
 
 
@@ -167,6 +165,7 @@ def flush_messages_to_rabbitmq(args, messages):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true", help="enable debug logs")
     parser.add_argument('--waggle-node-id', default=getenv('WAGGLE_NODE_ID', '0000000000000000'), help='waggle node id')
     parser.add_argument('--waggle-host-id', default=getenv('WAGGLE_HOST_ID', ''), help='waggle host id')
     parser.add_argument('--rabbitmq-host', default=getenv('RABBITMQ_HOST', 'localhost'), help='rabbitmq host')
@@ -179,10 +178,9 @@ def main():
     parser.add_argument('--metrics-data-dir', default=getenv("METRICS_DATA_DIR", "/run/metrics"), type=Path, help='metrics data directory')
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s %(message)s',
-        datefmt='%Y/%m/%d %H:%M:%S')
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
+                        format="%(asctime)s %(message)s",
+                        datefmt="%Y/%m/%d %H:%M:%S")
     # pika logging is too verbose, so we turn it down.
     logging.getLogger('pika').setLevel(logging.CRITICAL)
 
@@ -197,6 +195,7 @@ def main():
 
     while True:
         time.sleep(args.metrics_collect_interval)
+        logging.info("starting metrics collection")
 
         try:
             add_metrics_data_dir(args, messages)
@@ -214,6 +213,8 @@ def main():
             logging.warning("failed to add uptime metrics")
 
         flush_messages_to_rabbitmq(args, messages)
+
+        logging.info("finished metrics collection")
 
 
 if __name__ == "__main__":
