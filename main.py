@@ -45,6 +45,9 @@ prom2waggle = {
     "node_network_transmit_bytes_total": "sys.net.tx_bytes",
     "node_network_transmit_packets_total": "sys.net.tx_packets",
     "node_network_up": "sys.net.up",
+    # thermal
+    "node_thermal_zone_temp": "sys.thermal",
+    "node_hwmon_temp_celsius": "sys.hwmon",
 }
 
 
