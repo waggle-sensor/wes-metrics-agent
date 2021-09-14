@@ -48,6 +48,8 @@ prom2waggle = {
     # thermal
     "node_thermal_zone_temp": "sys.thermal",
     "node_hwmon_temp_celsius": "sys.hwmon",
+    "node_cooling_device_cur_state": "sys.cooling",
+    "node_cooling_device_max_state": "sys.cooling_max",
 }
 
 
