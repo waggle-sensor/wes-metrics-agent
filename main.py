@@ -32,6 +32,10 @@ prom2waggle = {
     "node_load1": "sys.load1",
     "node_load5": "sys.load5",
     "node_load15": "sys.load15",
+    # cpu frequencies
+    "node_cpu_scaling_frequency_hertz": "sys.freq.cpu",
+    "node_cpu_scaling_frequency_min_hertz": "sys.freq.cpu_min",
+    "node_cpu_scaling_frequency_max_hertz": "sys.freq.cpu_max",
     # mem
     "node_memory_MemAvailable_bytes": "sys.mem.avail",
     "node_memory_MemFree_bytes": "sys.mem.free",
