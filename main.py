@@ -152,6 +152,8 @@ def flush_messages_to_rabbitmq(args, messages):
                 # tag message with node and host metadata
                 msg.meta["node"] = args.waggle_node_id
                 msg.meta["host"] = args.waggle_host_id
+                if args.waggle_node_vsn != "":
+                    msg.meta["vsn"] = args.waggle_node_vsn
                 # add to rabbitmq queue
                 channel.basic_publish(exchange=args.rabbitmq_exchange,
                                         routing_key=msg.name,
@@ -168,6 +170,7 @@ def flush_messages_to_rabbitmq(args, messages):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--waggle-node-id', default=getenv('WAGGLE_NODE_ID', '0000000000000000'), help='waggle node id')
+    parser.add_argument('--waggle-node-vsn', default=getenv('WAGGLE_NODE_VSN', ''), help='waggle node vsn')
     parser.add_argument('--waggle-host-id', default=getenv('WAGGLE_HOST_ID', ''), help='waggle host id')
     parser.add_argument('--rabbitmq-host', default=getenv('RABBITMQ_HOST', 'localhost'), help='rabbitmq host')
     parser.add_argument('--rabbitmq-port', default=int(getenv('RABBITMQ_PORT', '5672')), type=int, help='rabbitmq port')
