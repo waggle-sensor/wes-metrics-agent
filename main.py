@@ -8,6 +8,7 @@ import wagglemsg as message
 from os import getenv
 import pika
 from collections import deque
+from pySMART import Device
 
 
 def get_node_exporter_metrics(url):
@@ -57,6 +58,29 @@ prom2waggle = {
 }
 
 
+def add_system_metrics_nvme(args, messages, timestamp=time.time_ns()):
+    logging.info("collecting system metrics (NVMe)")
+
+    nvmeroot = "/dev/nvme0"
+    type = "nvme-therm"
+    zone = "none"
+    try:
+        if Path(nvmeroot).exists():
+            nvmedev = Device("/dev/nvme0")
+            messages.append(
+                message.Message(
+                    name="sys.thermal",
+                    value=nvmedev.temperature,
+                    timestamp=timestamp,
+                    meta={"type": type, "zone": zone},
+                )
+            )
+        else:
+            logging.info("nvme (%s) not found. skipping...", nvmeroot)
+    except Exception:
+        logging.exception("failed to get nvme system metrics")
+
+
 def add_system_metrics(args, messages):
     timestamp = time.time_ns()
 
@@ -78,6 +102,7 @@ def add_system_metrics(args, messages):
                     meta=sample.labels,
                 )
             )
+    add_system_metrics_nvme(args, messages, timestamp)
 
 
 def add_uptime_metrics(args, messages):
