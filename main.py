@@ -9,6 +9,8 @@ from os import getenv
 import pika
 from collections import deque
 from pySMART import Device
+import re
+import subprocess
 
 
 def get_node_exporter_metrics(url):
@@ -58,6 +60,104 @@ prom2waggle = {
 }
 
 
+def __val_freq(val):
+    VAL_FRE_RE = re.compile(r"\b(\d+)%@(\d+)")
+    if "@" in val:
+        match = VAL_FRE_RE.search(val)
+        return {"perc": int(match.group(1)), "freq": int(match.group(2)) * 1000000}
+    else:
+        return {"freq": int(val) * 1000000}
+
+
+def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
+    """Parse 'tegrastats' for system metrics_url
+
+    Includes CPU, GPU, EMC, APE percentages and wattages
+    """
+    logging.info("collecting system metrics (tegra)")
+
+    tegradata = None
+    try:
+        with subprocess.Popen("tegrastats", stdout=subprocess.PIPE) as process:
+            # try for 3 seconds to get tegrastats info
+            t_end = time.time() + 3
+            while time.time() < t_end:
+                output = process.stdout.readline()
+                if process.poll() is not None and output == "":
+                    sleep(0.5)
+                    continue
+                if output:
+                    tegradata = output.strip().decode()
+                    break
+
+        if tegradata:
+            # populate CPU frequency percentages
+            ## ex. CPU [25%@652,15%@806,16%@880,31%@902,19%@960,38%@960]
+            CPU_RE = re.compile(r"CPU \[(.*?)\]")
+            cpudata = CPU_RE.search(tegradata)
+            if cpudata:
+                for idx, cpu_str in enumerate(cpudata.group(1).split(",")):
+                    if "off" == cpu_str:
+                        continue
+
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.cpu_perc",
+                            value=__val_freq(cpu_str)["perc"],
+                            timestamp=timestamp,
+                            meta={"cpu": str(idx)},
+                        )
+                    )
+
+            # populate the GPU, EMC (external memory controller),
+            #  APE (audio processing engine), etc. freqency percentages
+            ## ex. EMC_FREQ 1%@1600 GR3D_FREQ 0%@114 APE 150
+            VALS_RE = re.compile(r"\b([A-Z0-9_]+) ([0-9%@]+)(?=[^/])\b")
+            for name, val in re.findall(VALS_RE, tegradata):
+                name = name.split("_")[0] if "FREQ" in name else name
+                hz_data = __val_freq(val)
+
+                if hz_data.get("perc", None) is not None:
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.{name}_perc".format(name=name.lower()),
+                            value=hz_data["perc"],
+                            timestamp=timestamp,
+                            meta={},
+                        )
+                    )
+
+                # ONLY for APE do we report current frequency as it can't
+                #  be found more accurate elsewhere
+                if name == "APE" and hz_data.get("freq"):
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.{name}".format(name=name.lower()),
+                            value=hz_data["freq"],
+                            timestamp=timestamp,
+                            meta={},
+                        )
+                    )
+
+            # populate Wattage data (milliwatts)
+            ## ex. VDD_IN 5071/4811 VDD_CPU_GPU_CV 1315/1066 VDD_SOC 1116/1116
+            WATT_RE = re.compile(r"\b(\w+) ([0-9.]+)\/([0-9.]+)\b")
+            for name, current, avg in re.findall(WATT_RE, tegradata):
+                messages.append(
+                    message.Message(
+                        name="sys.power",
+                        value=int(current),
+                        timestamp=timestamp,
+                        meta={"name": name.lower()},
+                    )
+                )
+        else:
+            logging.info("tegrastats did not return any data. skipping...")
+
+    except Exception:
+        logging.exception("failed to get tegra system metrics")
+
+
 def add_system_metrics_nvme(args, messages, timestamp=time.time_ns()):
     logging.info("collecting system metrics (NVMe)")
 
@@ -102,6 +202,7 @@ def add_system_metrics(args, messages):
                     meta=sample.labels,
                 )
             )
+    add_system_metrics_tegra(args, messages, timestamp)
     add_system_metrics_nvme(args, messages, timestamp)
 
 
