@@ -118,6 +118,10 @@ def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
                 name = name.split("_")[0] if "FREQ" in name else name
                 hz_data = __val_freq(val)
 
+                # normalize to GPU names
+                if name.lower() == "gr3d":
+                    name = "gpu"
+
                 if hz_data.get("perc", None) is not None:
                     messages.append(
                         message.Message(
