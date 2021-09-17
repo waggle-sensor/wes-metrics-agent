@@ -1,3 +1,4 @@
-https://github.com/waggle-sensor/pywaggle/archive/v0.40.4.zip
+https://github.com/waggle-sensor/pywagglemsg/releases/download/0.1.0/wagglemsg-0.1.0-py3-none-any.whl
+pika
 prometheus_client
 pySMART

@@ -4,7 +4,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from pathlib import Path
 import time
 import logging
-from waggle import message
+import wagglemsg as message
 from os import getenv
 import pika
 from collections import deque
