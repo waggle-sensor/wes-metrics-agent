@@ -163,6 +163,77 @@ def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
         logging.exception("failed to get tegra system metrics")
 
 
+def add_system_metrics_jetson_clocks(args, messages, timestamp=time.time_ns()):
+    """Add Jetson specific GPU and EMC frequency information to system metrics
+
+    Args:
+        args: all program arguments
+        messages: the message queue to append metric to
+        timestamp (int, optional): Timestamp to mark metrics with. Defaults to time.time_ns().
+    """
+    logging.info("collecting system metrics (Jetson Clocks)")
+
+    pdata = []
+    try:
+        with subprocess.Popen(["jetson_clocks", "--show"], stdout=subprocess.PIPE) as process:
+            # wait for 3 seconds to get jetson_clocks info
+            t_end = time.time() + 3
+            while time.time() < t_end:
+                pollresults = select([process.stdout], [], [], 1)[0]
+                if pollresults:
+                    output = pollresults[0].readline()
+                    if output:
+                        pdata.append(output.strip().decode())
+                    else:
+                        break
+
+        if pdata:
+            # populate the GPU and EMC min, max, current frequency
+            GPU_RE = re.compile(r"GPU MinFreq=(\d+) MaxFreq=(\d+) CurrentFreq=(\d+)")
+            EMC_RE = re.compile(r"EMC MinFreq=(\d+) MaxFreq=(\d+) CurrentFreq=(\d+)")
+            for line in pdata:
+                gpudata = GPU_RE.search(line)
+                emcdata = EMC_RE.search(line)
+                name = ""
+                if gpudata:
+                    name = "gpu"
+                    freqdata = gpudata
+                elif emcdata:
+                    name = "emc"
+                    freqdata = emcdata
+
+                if name:
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.{name}_min".format(name=name.lower()),
+                            value=freqdata.group(1),
+                            timestamp=timestamp,
+                            meta={},
+                        )
+                    )
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.{name}_max".format(name=name.lower()),
+                            value=freqdata.group(2),
+                            timestamp=timestamp,
+                            meta={},
+                        )
+                    )
+                    messages.append(
+                        message.Message(
+                            name="sys.freq.{name}".format(name=name.lower()),
+                            value=freqdata.group(3),
+                            timestamp=timestamp,
+                            meta={},
+                        )
+                    )
+        else:
+            logging.info("jetson_clocks did not return any data. skipping...")
+
+    except Exception:
+        logging.exception("failed to get jetson clock system metrics")
+
+
 def add_system_metrics_nvme(args, messages, timestamp=time.time_ns()):
     logging.info("collecting system metrics (NVMe)")
 
@@ -208,6 +279,7 @@ def add_system_metrics(args, messages):
                 )
             )
     add_system_metrics_tegra(args, messages, timestamp)
+    add_system_metrics_jetson_clocks(args, messages, timestamp)
     add_system_metrics_nvme(args, messages, timestamp)
 
 
