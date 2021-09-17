@@ -6,6 +6,7 @@ import time
 from collections import deque
 from os import getenv
 from pathlib import Path
+from select import select
 from urllib.request import urlopen
 
 import pika
@@ -71,25 +72,24 @@ def __val_freq(val):
 
 
 def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
-    """Parse 'tegrastats' for system metrics_url
+    """Add system metrics gathered by the `tegrastats` subprocess
 
-    Includes CPU, GPU, EMC, APE percentages and wattages
+    Args:
+        args: all program arguments
+        messages: the message queue to append metric to
+        timestamp (int, optional): Timestamp to mark metrics with. Defaults to time.time_ns().
     """
     logging.info("collecting system metrics (tegra)")
 
     tegradata = None
     try:
-        with subprocess.Popen("tegrastats", stdout=subprocess.PIPE) as process:
-            # try for 3 seconds to get tegrastats info
-            t_end = time.time() + 3
-            while time.time() < t_end:
-                output = process.stdout.readline()
-                if process.poll() is not None and output == "":
-                    sleep(0.5)
-                    continue
+        with subprocess.Popen(["tegrastats"], stdout=subprocess.PIPE) as process:
+            # wait for 3 seconds to get tegrastats info
+            pollresults = select([process.stdout], [], [], 3)[0]
+            if pollresults:
+                output = pollresults[0].readline()
                 if output:
                     tegradata = output.strip().decode()
-                    break
 
         if tegradata:
             # populate CPU frequency percentages
