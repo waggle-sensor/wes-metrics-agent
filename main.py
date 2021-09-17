@@ -1,16 +1,17 @@
 import argparse
-from urllib.request import urlopen
-from prometheus_client.parser import text_string_to_metric_families
-from pathlib import Path
-import time
 import logging
-import wagglemsg as message
-from os import getenv
-import pika
-from collections import deque
-from pySMART import Device
 import re
 import subprocess
+import time
+from collections import deque
+from os import getenv
+from pathlib import Path
+from urllib.request import urlopen
+
+import pika
+import wagglemsg as message
+from prometheus_client.parser import text_string_to_metric_families
+from pySMART import Device
 
 
 def get_node_exporter_metrics(url):
@@ -251,12 +252,7 @@ def add_provision_metrics(args, messages):
     timestamp = time.time_ns()
     try:
         # check the last line is a complete factory provision log
-        lastline = (
-            Path("/host/etc/waggle/factory_provision")
-            .read_text()
-            .strip()
-            .rsplit("\n", 1)[1]
-        )
+        lastline = Path("/host/etc/waggle/factory_provision").read_text().strip().rsplit("\n", 1)[1]
         if "Factory Provisioning Finish" in lastline:
             date = lastline.rsplit(":", 1)[0]
             messages.append(
@@ -336,9 +332,7 @@ def flush_messages_to_rabbitmq(args, messages):
                 messages.popleft()
                 published_total += 1
     except Exception:
-        logging.warning(
-            "rabbitmq connection failed. %d metrics buffered for retry", len(messages)
-        )
+        logging.warning("rabbitmq connection failed. %d metrics buffered for retry", len(messages))
 
     logging.info("published %d metrics", published_total)
 
