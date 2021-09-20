@@ -14,10 +14,13 @@ COPY build/nvidia-l4t-apt-source.list /etc/apt/sources.list.d/
 COPY build/jetson-ota-public.asc /etc/apt/trusted.gpg.d/
 
 # Disable the hardware compatibility check & install Nvidia tools
-RUN mkdir -p /opt/nvidia/l4t-packages/ && \
+## only install for ARM based CPUs [armv7l, aarch64]
+RUN if [ "$(uname -m)" = "armv7l" ] || [ "$(uname -m)" = "aarch64" ] ; then \
+    mkdir -p /opt/nvidia/l4t-packages/ && \
     touch /opt/nvidia/l4t-packages/.nv-l4t-disable-boot-fw-update-in-preinstall && \
     apt-get update && apt-get install --no-install-recommends -y \
-        nvidia-l4t-tools
+    nvidia-l4t-tools \
+    ; fi
 
 # Add necessary python libraries
 COPY requirements.txt requirements.txt
