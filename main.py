@@ -208,7 +208,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}_min".format(name=name.lower()),
-                            value=freqdata.group(1),
+                            value=int(freqdata.group(1)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -216,7 +216,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}_max".format(name=name.lower()),
-                            value=freqdata.group(2),
+                            value=int(freqdata.group(2)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -224,7 +224,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}".format(name=name.lower()),
-                            value=freqdata.group(3),
+                            value=int(freqdata.group(3)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -256,7 +256,7 @@ def add_system_metrics_nvme(args, messages):
             messages.append(
                 message.Message(
                     name="sys.thermal",
-                    value=nvmedev.temperature,
+                    value=float(nvmedev.temperature),
                     timestamp=timestamp,
                     meta={"type": type, "zone": zone},
                 )
