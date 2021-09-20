@@ -71,14 +71,15 @@ def __val_freq(val):
         return {"freq": int(val) * 1000000}
 
 
-def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
+def add_system_metrics_tegra(args, messages):
     """Add system metrics gathered by the `tegrastats` subprocess
 
     Args:
         args: all program arguments
         messages: the message queue to append metric to
-        timestamp (int, optional): Timestamp to mark metrics with. Defaults to time.time_ns().
     """
+    timestamp = time.time_ns()
+
     logging.info("collecting system metrics (tegra)")
 
     tegradata = None
@@ -163,14 +164,15 @@ def add_system_metrics_tegra(args, messages, timestamp=time.time_ns()):
         logging.exception("failed to get tegra system metrics")
 
 
-def add_system_metrics_jetson_clocks(args, messages, timestamp=time.time_ns()):
+def add_system_metrics_jetson_clocks(args, messages):
     """Add Jetson specific GPU and EMC frequency information to system metrics
 
     Args:
         args: all program arguments
         messages: the message queue to append metric to
-        timestamp (int, optional): Timestamp to mark metrics with. Defaults to time.time_ns().
     """
+    timestamp = time.time_ns()
+
     logging.info("collecting system metrics (Jetson Clocks)")
 
     pdata = []
@@ -234,7 +236,15 @@ def add_system_metrics_jetson_clocks(args, messages, timestamp=time.time_ns()):
         logging.exception("failed to get jetson clock system metrics")
 
 
-def add_system_metrics_nvme(args, messages, timestamp=time.time_ns()):
+def add_system_metrics_nvme(args, messages):
+    """Add system metrics for an optional NVMe drive (/dev/nvme0)
+
+    Args:
+        args: all program arguments
+        messages: the message queue to append metric to
+    """
+    timestamp = time.time_ns()
+
     logging.info("collecting system metrics (NVMe)")
 
     nvmeroot = "/dev/nvme0"
@@ -278,9 +288,10 @@ def add_system_metrics(args, messages):
                     meta=sample.labels,
                 )
             )
-    add_system_metrics_tegra(args, messages, timestamp)
-    add_system_metrics_jetson_clocks(args, messages, timestamp)
-    add_system_metrics_nvme(args, messages, timestamp)
+
+    add_system_metrics_tegra(args, messages)
+    add_system_metrics_jetson_clocks(args, messages)
+    add_system_metrics_nvme(args, messages)
 
 
 def add_uptime_metrics(args, messages):
