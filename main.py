@@ -85,8 +85,8 @@ def add_system_metrics_tegra(args, messages):
     tegradata = None
     try:
         with subprocess.Popen(["tegrastats"], stdout=subprocess.PIPE) as process:
-            # wait for 3 seconds to get tegrastats info
-            pollresults = select([process.stdout], [], [], 3)[0]
+            # wait for 10 seconds to get tegrastats info
+            pollresults = select([process.stdout], [], [], 10)[0]
             if pollresults:
                 output = pollresults[0].readline()
                 if output:
@@ -178,10 +178,10 @@ def add_system_metrics_jetson_clocks(args, messages):
     pdata = []
     try:
         with subprocess.Popen(["jetson_clocks", "--show"], stdout=subprocess.PIPE) as process:
-            # wait for 3 seconds to get jetson_clocks info
-            t_end = time.time() + 3
+            # wait for 10 seconds to get jetson_clocks info
+            t_end = time.time() + 10
             while time.time() < t_end:
-                pollresults = select([process.stdout], [], [], 1)[0]
+                pollresults = select([process.stdout], [], [], 2)[0]
                 if pollresults:
                     output = pollresults[0].readline()
                     if output:
