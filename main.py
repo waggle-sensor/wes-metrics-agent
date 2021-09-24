@@ -502,10 +502,18 @@ def main():
     add_provision_metrics(args, messages)
 
     logging.info("collecting metrics every %s seconds", args.metrics_collect_interval)
+    runtime = 0
 
     while True:
-        time.sleep(args.metrics_collect_interval)
+        sleeptime = (
+            0
+            if args.metrics_collect_interval - runtime < 0
+            else args.metrics_collect_interval - runtime
+        )
+        logging.info("starting metrics collection in %s seconds", int(sleeptime))
+        time.sleep(sleeptime)
         logging.info("starting metrics collection")
+        start = time.time()
 
         try:
             add_metrics_data_dir(args, messages)
@@ -524,6 +532,7 @@ def main():
 
         flush_messages_to_rabbitmq(args, messages)
 
+        runtime = time.time() - start
         logging.info("finished metrics collection")
 
 
