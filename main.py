@@ -297,10 +297,10 @@ def add_system_metrics_gps(args, messages):
         sat_report = False
         gpsclient = GPSDClient(host=args.gpsd_host, port=args.gpsd_port)
         for result in gpsclient.dict_stream(convert_datetime=False):
-            # look for a GPS report that has GPS lock (mode 2 [2D] or 3 [3D])
-            if not tpv_report and result["class"] == "TPV" and result["mode"] in [2, 3]:
+            # look for a GPS report
+            if not tpv_report and result["class"] == "TPV":
                 tpv_report = True
-                for vkey in ["lat", "lon", "alt", "epx", "epy", "epv"]:
+                for vkey in ["lat", "lon", "alt", "epx", "epy", "epv", "mode"]:
                     value = result.get(vkey)
                     if value:
                         messages.append(
