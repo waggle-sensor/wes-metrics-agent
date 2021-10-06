@@ -321,7 +321,7 @@ def add_system_metrics_gps(args, messages):
                 used_sats = len([x for x in result["satellites"] if x["used"]])
                 messages.append(
                     message.Message(
-                        name="sys.gps.satellites".format(name=vkey),
+                        name="sys.gps.satellites",
                         value=int(used_sats),
                         timestamp=timestamp,
                         meta={},
