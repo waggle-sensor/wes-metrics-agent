@@ -80,12 +80,15 @@ def __val_freq(val):
         return {"freq": int(val) * 1000000}
 
 
+@timeout_decorator.timeout(10)
 def add_system_metrics_tegra(args, messages):
     """Add system metrics gathered by the `tegrastats` subprocess
 
     Args:
         args: all program arguments
         messages: the message queue to append metric to
+
+    Throws `timeout_decorator.timeout_decorator.TimeoutError` on function timeout
     """
     timestamp = time.time_ns()
 
@@ -173,12 +176,15 @@ def add_system_metrics_tegra(args, messages):
         logging.exception("failed to get tegra system metrics")
 
 
+@timeout_decorator.timeout(10)
 def add_system_metrics_jetson_clocks(args, messages):
     """Add Jetson specific GPU and EMC frequency information to system metrics
 
     Args:
         args: all program arguments
         messages: the message queue to append metric to
+
+    Throws `timeout_decorator.timeout_decorator.TimeoutError` on function timeout
     """
     timestamp = time.time_ns()
 
@@ -283,6 +289,8 @@ def add_system_metrics_gps(args, messages):
     Args:
         args: all program arguments
         messages: the message queue to append metric to
+
+    Throws `timeout_decorator.timeout_decorator.TimeoutError` on function timeout
     """
     timestamp = time.time_ns()
 
@@ -357,10 +365,22 @@ def add_system_metrics(args, messages):
                 )
             )
 
-    add_system_metrics_tegra(args, messages)
-    add_system_metrics_jetson_clocks(args, messages)
+    try:
+        add_system_metrics_tegra(args, messages)
+    except Exception as e:
+        logging.exception(f"Exception gathering Tegra system metrics [{e}]")
+
+    try:
+        add_system_metrics_jetson_clocks(args, messages)
+    except Exception as e:
+        logging.exception(f"Exception gathering Jetson Clocks system metrics [{e}]")
+
     add_system_metrics_nvme(args, messages)
-    add_system_metrics_gps(args, messages)
+
+    try:
+        add_system_metrics_gps(args, messages)
+    except Exception as e:
+        logging.exception(f"Exception gathering GSPS system metrics [{e}]")
 
 
 def add_uptime_metrics(args, messages):
