@@ -10,7 +10,9 @@ from select import select
 from urllib.request import urlopen
 
 import pika
+import timeout_decorator
 import wagglemsg as message
+from gpsdclient import GPSDClient
 from prometheus_client.parser import text_string_to_metric_families
 from pySMART import Device
 
@@ -61,6 +63,13 @@ prom2waggle = {
     "node_cooling_device_max_state": "sys.cooling_max",
 }
 
+# mapping of gps metric to it's error estimate key
+gpsvalue2err = {
+    "lat": "epy",
+    "lon": "epx",
+    "alt": "epv",
+}
+
 
 def __val_freq(val):
     VAL_FRE_RE = re.compile(r"\b(\d+)%@(\d+)")
@@ -85,8 +94,8 @@ def add_system_metrics_tegra(args, messages):
     tegradata = None
     try:
         with subprocess.Popen(["tegrastats"], stdout=subprocess.PIPE) as process:
-            # wait for 3 seconds to get tegrastats info
-            pollresults = select([process.stdout], [], [], 3)[0]
+            # wait for 10 seconds to get tegrastats info
+            pollresults = select([process.stdout], [], [], 10)[0]
             if pollresults:
                 output = pollresults[0].readline()
                 if output:
@@ -178,10 +187,10 @@ def add_system_metrics_jetson_clocks(args, messages):
     pdata = []
     try:
         with subprocess.Popen(["jetson_clocks", "--show"], stdout=subprocess.PIPE) as process:
-            # wait for 3 seconds to get jetson_clocks info
-            t_end = time.time() + 3
+            # wait for 10 seconds to get jetson_clocks info
+            t_end = time.time() + 10
             while time.time() < t_end:
-                pollresults = select([process.stdout], [], [], 1)[0]
+                pollresults = select([process.stdout], [], [], 2)[0]
                 if pollresults:
                     output = pollresults[0].readline()
                     if output:
@@ -208,7 +217,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}_min".format(name=name.lower()),
-                            value=freqdata.group(1),
+                            value=int(freqdata.group(1)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -216,7 +225,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}_max".format(name=name.lower()),
-                            value=freqdata.group(2),
+                            value=int(freqdata.group(2)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -224,7 +233,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     messages.append(
                         message.Message(
                             name="sys.freq.{name}".format(name=name.lower()),
-                            value=freqdata.group(3),
+                            value=int(freqdata.group(3)),
                             timestamp=timestamp,
                             meta={},
                         )
@@ -256,7 +265,7 @@ def add_system_metrics_nvme(args, messages):
             messages.append(
                 message.Message(
                     name="sys.thermal",
-                    value=nvmedev.temperature,
+                    value=float(nvmedev.temperature),
                     timestamp=timestamp,
                     meta={"type": type, "zone": zone},
                 )
@@ -265,6 +274,65 @@ def add_system_metrics_nvme(args, messages):
             logging.info("nvme (%s) not found. skipping...", nvmeroot)
     except Exception:
         logging.exception("failed to get nvme system metrics")
+
+
+@timeout_decorator.timeout(10)
+def add_system_metrics_gps(args, messages):
+    """Add GPS system metrics
+
+    Args:
+        args: all program arguments
+        messages: the message queue to append metric to
+    """
+    timestamp = time.time_ns()
+
+    logging.info("collecting system metrics (GPS)")
+
+    if "nxcore" not in args.waggle_host_id:
+        logging.warning("skipping GPS publish for non-main host (%s)", args.waggle_host_id)
+        return
+
+    try:
+        tpv_report = False
+        sat_report = False
+        gpsclient = GPSDClient(host=args.gpsd_host, port=args.gpsd_port)
+        for result in gpsclient.dict_stream(convert_datetime=False):
+            # look for a GPS report
+            if not tpv_report and result["class"] == "TPV":
+                tpv_report = True
+                for vkey in ["lat", "lon", "alt", "epx", "epy", "epv", "mode"]:
+                    value = result.get(vkey)
+                    if value:
+                        messages.append(
+                            message.Message(
+                                name="sys.gps.{name}".format(name=vkey),
+                                value=float(value),
+                                timestamp=timestamp,
+                                meta={},
+                            )
+                        )
+                    else:
+                        logging.info("gps (%s) not found. skipping...", vkey)
+
+            # report salellite info
+            if not sat_report and result["class"] == "SKY" and result["satellites"]:
+                sat_report = True
+                # loop over the sallites and count number being used
+                used_sats = len([x for x in result["satellites"] if x["used"]])
+                messages.append(
+                    message.Message(
+                        name="sys.gps.satellites",
+                        value=int(used_sats),
+                        timestamp=timestamp,
+                        meta={},
+                    )
+                )
+
+            if sat_report and tpv_report:
+                break
+
+    except Exception:
+        logging.exception("failed to get gps system metrics")
 
 
 def add_system_metrics(args, messages):
@@ -292,6 +360,7 @@ def add_system_metrics(args, messages):
     add_system_metrics_tegra(args, messages)
     add_system_metrics_jetson_clocks(args, messages)
     add_system_metrics_nvme(args, messages)
+    add_system_metrics_gps(args, messages)
 
 
 def add_uptime_metrics(args, messages):
@@ -467,6 +536,17 @@ def main():
         help="rabbitmq exchange to publish to",
     )
     parser.add_argument(
+        "--gpsd-host",
+        default=getenv("GPSD_HOST", "localhost"),
+        help="gpsd host",
+    )
+    parser.add_argument(
+        "--gpsd-port",
+        default=int(getenv("GPSD_PORT", "2947")),
+        type=int,
+        help="gpsd port",
+    )
+    parser.add_argument(
         "--metrics-url",
         default=getenv("METRICS_URL", "http://localhost:9100/metrics"),
         help="node exporter metrics url",
@@ -502,10 +582,18 @@ def main():
     add_provision_metrics(args, messages)
 
     logging.info("collecting metrics every %s seconds", args.metrics_collect_interval)
+    runtime = 0
 
     while True:
-        time.sleep(args.metrics_collect_interval)
+        sleeptime = (
+            0
+            if args.metrics_collect_interval - runtime < 0
+            else args.metrics_collect_interval - runtime
+        )
+        logging.info("starting metrics collection in %s seconds", int(sleeptime))
+        time.sleep(sleeptime)
         logging.info("starting metrics collection")
+        start = time.time()
 
         try:
             add_metrics_data_dir(args, messages)
@@ -524,6 +612,7 @@ def main():
 
         flush_messages_to_rabbitmq(args, messages)
 
+        runtime = time.time() - start
         logging.info("finished metrics collection")
 
 
