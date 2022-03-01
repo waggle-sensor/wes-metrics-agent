@@ -1,12 +1,15 @@
 import argparse
 import logging
 import re
+import sched
+import signal
 import subprocess
 import time
 from collections import deque
 from os import getenv
 from pathlib import Path
-from select import select
+from queue import Empty, LifoQueue
+from threading import Event, Thread
 from urllib.request import urlopen
 
 import pika
@@ -15,6 +18,12 @@ import wagglemsg as message
 from gpsdclient import GPSDClient
 from prometheus_client.parser import text_string_to_metric_families
 from pySMART import Device
+
+tegrastats_queue = LifoQueue()
+jetsonclocks_queue = LifoQueue()
+# used to signal threads to terminate
+stop_event = Event()
+watched_signals = [signal.SIGINT, signal.SIGTERM]
 
 
 def get_node_exporter_metrics(url):
@@ -80,6 +89,37 @@ def __val_freq(val):
         return {"freq": int(val) * 1000000}
 
 
+def tegrastats_worker(interval):
+    """Thread worker to run `tegrastats` and populate queue
+
+    Args:
+        interval: data collection interval in seconds
+    """
+    interval = interval * 1000
+    logging.info(f"starting tegrastats worker [{interval} ms]...")
+
+    try:
+        with subprocess.Popen(
+            ["tegrastats", "--interval", f"{interval}"],
+            stdout=subprocess.PIPE,
+        ) as process:
+            while not stop_event.is_set():
+                output = process.stdout.readline()
+                if output:
+                    line = output.strip().decode()
+                    tegrastats_queue.put((time.time_ns(), line))
+                    logging.debug(f"- added to tegrastats queue [size: {tegrastats_queue.qsize()}]")
+                    logging.debug(line)
+
+            # stop event received, close subprocess and return
+            process.terminate()
+    except FileNotFoundError:
+        # we are most likely not running on a jetson device
+        logging.warning("'tegrastats' not found, skipping tegrastats collection")
+
+    logging.info("stopped tegrastats worker")
+
+
 def add_system_metrics_tegra(args, messages):
     """Add system metrics gathered by the `tegrastats` subprocess
 
@@ -87,21 +127,17 @@ def add_system_metrics_tegra(args, messages):
         args: all program arguments
         messages: the message queue to append metric to
     """
-    timestamp = time.time_ns()
-
     logging.info("collecting system metrics (tegra)")
 
-    tegradata = None
-    try:
-        with subprocess.Popen(["tegrastats"], stdout=subprocess.PIPE) as process:
-            # wait for 10 seconds to get tegrastats info
-            pollresults = select([process.stdout], [], [], 10)[0]
-            if pollresults:
-                output = pollresults[0].readline()
-                if output:
-                    tegradata = output.strip().decode()
+    # process all queued tegrastats
+    while not tegrastats_queue.empty():
+        try:
+            timestamp, tegradata = tegrastats_queue.get(block=False)
+            logging.debug(
+                f"- pulled from tegrastats queue [ts: {timestamp} | q_size: {tegrastats_queue.qsize()}]"
+            )
+            logging.debug(tegradata)
 
-        if tegradata:
             # populate CPU frequency percentages
             ## ex. CPU [25%@652,15%@806,16%@880,31%@902,19%@960,38%@960]
             CPU_RE = re.compile(r"CPU \[(.*?)\]")
@@ -166,11 +202,60 @@ def add_system_metrics_tegra(args, messages):
                         meta={"name": name.lower()},
                     )
                 )
-        else:
-            logging.info("tegrastats did not return any data. skipping...")
 
-    except Exception:
-        logging.exception("failed to get tegra system metrics")
+        except Empty:
+            continue
+        except Exception:
+            logging.exception("failed to get tegra system metrics")
+
+
+def jetson_clocks_worker(interval):
+    """Thread worker to run `jetson_clocks` and populate queue
+
+    Args:
+        interval: data collection interval in seconds
+    """
+    logging.info(f"starting jetson_clocks worker [{interval} s]...")
+
+    sch = sched.scheduler(time.time, time.sleep)
+
+    def jetson_clocks_runner(delay):
+        if stop_event.is_set():
+            return
+        logging.debug("- scheduling next jetson_clocks to start in %s seconds", int(delay))
+        future_event = sch.enter(delay, 0, jetson_clocks_runner, kwargs={"delay": delay})
+
+        pdata = []
+        try:
+            with subprocess.Popen(["jetson_clocks", "--show"], stdout=subprocess.PIPE) as process:
+                while True:
+                    output = process.stdout.readline()
+                    if output:
+                        pdata.append(output.strip().decode())
+                    else:
+                        break
+        except FileNotFoundError:
+            # we are most likely not running on a jetson device
+            logging.warning("'jetson_clocks' not found, skipping jetson clocks collection")
+            sch.cancel(future_event)
+            return
+
+        jetsonclocks_queue.put((time.time_ns(), pdata))
+        logging.debug(f"- added to jetson_clocks queue [size: {jetsonclocks_queue.qsize()}]")
+        logging.debug(pdata)
+
+        if stop_event.is_set():
+            try:
+                sch.cancel(future_event)
+            except Exception:
+                # pass as the future event run will simply return
+                pass
+
+    sch.enter(interval, 0, jetson_clocks_runner, kwargs={"delay": interval})
+
+    # wait here until all schedules finish (i.e. stop_event triggered)
+    sch.run()
+    logging.info("stopped jetson_clocks worker")
 
 
 def add_system_metrics_jetson_clocks(args, messages):
@@ -180,25 +265,17 @@ def add_system_metrics_jetson_clocks(args, messages):
         args: all program arguments
         messages: the message queue to append metric to
     """
-    timestamp = time.time_ns()
-
     logging.info("collecting system metrics (Jetson Clocks)")
 
-    pdata = []
-    try:
-        with subprocess.Popen(["jetson_clocks", "--show"], stdout=subprocess.PIPE) as process:
-            # wait for 10 seconds to get jetson_clocks info
-            t_end = time.time() + 10
-            while time.time() < t_end:
-                pollresults = select([process.stdout], [], [], 2)[0]
-                if pollresults:
-                    output = pollresults[0].readline()
-                    if output:
-                        pdata.append(output.strip().decode())
-                    else:
-                        break
+    # process all queued jetson clocks
+    while not jetsonclocks_queue.empty():
+        try:
+            timestamp, pdata = jetsonclocks_queue.get(block=False)
+            logging.debug(
+                f"- pulled from jetson_clocks queue [ts: {timestamp} | q_size: {jetsonclocks_queue.qsize()}]"
+            )
+            logging.debug(pdata)
 
-        if pdata:
             # populate the GPU and EMC min, max, current frequency
             GPU_RE = re.compile(r"GPU MinFreq=(\d+) MaxFreq=(\d+) CurrentFreq=(\d+)")
             EMC_RE = re.compile(r"EMC MinFreq=(\d+) MaxFreq=(\d+) CurrentFreq=(\d+)")
@@ -238,11 +315,11 @@ def add_system_metrics_jetson_clocks(args, messages):
                             meta={},
                         )
                     )
-        else:
-            logging.info("jetson_clocks did not return any data. skipping...")
 
-    except Exception:
-        logging.exception("failed to get jetson clock system metrics")
+        except Empty:
+            continue
+        except Exception:
+            logging.exception("failed to get jetson clock system metrics")
 
 
 def add_system_metrics_nvme(args, messages):
@@ -493,6 +570,11 @@ def flush_messages_to_rabbitmq(args, messages):
     logging.info("published %d metrics", published_total)
 
 
+def handle_signals(sig, frame):
+    logging.info(f"Termination signal [{sig}] caught, signaling worker threads to stop..")
+    stop_event.set()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="enable debug logs")
@@ -575,7 +657,22 @@ def main():
 
     logging.info("metrics agent started on %s", args.waggle_host_id)
 
+    # setup signal handlers
+    for sig in watched_signals:
+        logging.info(f"setting signal handler for signal [{sig}]")
+        signal.signal(sig, handle_signals)
+
     messages = deque()
+
+    logging.info("starting threaded processes")
+    tegra_thread = Thread(
+        target=tegrastats_worker, args=(args.metrics_collect_interval,), daemon=False
+    )
+    tegra_thread.start()
+    jetson_thread = Thread(
+        target=jetson_clocks_worker, args=(args.metrics_collect_interval,), daemon=False
+    )
+    jetson_thread.start()
 
     logging.info("collecting one time startup metrics")
     add_version_metrics(args, messages)
@@ -584,7 +681,7 @@ def main():
     logging.info("collecting metrics every %s seconds", args.metrics_collect_interval)
     runtime = 0
 
-    while True:
+    while not stop_event.is_set():
         sleeptime = (
             0
             if args.metrics_collect_interval - runtime < 0
@@ -592,6 +689,9 @@ def main():
         )
         logging.info("starting metrics collection in %s seconds", int(sleeptime))
         time.sleep(sleeptime)
+        if stop_event.is_set():
+            continue
+
         logging.info("starting metrics collection")
         start = time.time()
 
@@ -614,6 +714,10 @@ def main():
 
         runtime = time.time() - start
         logging.info("finished metrics collection")
+
+    # wait for the threads to finish
+    tegra_thread.join(args.metrics_collect_interval * 2)
+    jetson_thread.join(args.metrics_collect_interval * 2)
 
 
 if __name__ == "__main__":
