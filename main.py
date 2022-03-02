@@ -679,22 +679,15 @@ def main():
     add_provision_metrics(args, messages)
 
     logging.info("collecting metrics every %s seconds", args.metrics_collect_interval)
-    runtime = 0
+    sch = sched.scheduler(time.time, time.sleep)
 
-    while not stop_event.is_set():
-        sleeptime = (
-            0
-            if args.metrics_collect_interval - runtime < 0
-            else args.metrics_collect_interval - runtime
-        )
-        logging.info("starting metrics collection in %s seconds", int(sleeptime))
-        time.sleep(sleeptime)
+    def main_runner(delay):
         if stop_event.is_set():
-            continue
+            return
+        logging.info("scheduling next metrics collection to start in %s seconds", int(delay))
+        future_event = sch.enter(delay, 0, main_runner, kwargs={"delay": delay})
 
         logging.info("starting metrics collection")
-        start = time.time()
-
         try:
             add_metrics_data_dir(args, messages)
         except Exception:
@@ -712,8 +705,23 @@ def main():
 
         flush_messages_to_rabbitmq(args, messages)
 
-        runtime = time.time() - start
         logging.info("finished metrics collection")
+
+        if stop_event.is_set():
+            try:
+                sch.cancel(future_event)
+            except Exception:
+                # pass as the future event run will simply return
+                pass
+
+    sch.enter(
+        args.metrics_collect_interval,
+        0,
+        main_runner,
+        kwargs={"delay": args.metrics_collect_interval},
+    )
+    # wait here until all schedules finish (i.e. stop_event triggered)
+    sch.run()
 
     # wait for the threads to finish
     tegra_thread.join(args.metrics_collect_interval * 2)
