@@ -434,11 +434,6 @@ def add_system_metrics(args, messages):
                 )
             )
 
-    add_system_metrics_tegra(args, messages)
-    add_system_metrics_jetson_clocks(args, messages)
-    add_system_metrics_nvme(args, messages)
-    add_system_metrics_gps(args, messages)
-
 
 def add_uptime_metrics(args, messages):
     logging.info("collecting uptime metrics")
@@ -697,6 +692,26 @@ def main():
             add_system_metrics(args, messages)
         except Exception:
             logging.warning("failed to add system metrics")
+
+        try:
+            add_system_metrics_tegra(args, messages)
+        except Exception:
+            logging.warning("failed to add system metrics (tegra)")
+
+        try:
+            add_system_metrics_jetson_clocks(args, messages)
+        except Exception:
+            logging.warning("failed to add system metrics (jetson)")
+
+        try:
+            add_system_metrics_nvme(args, messages)
+        except Exception:
+            logging.warning("failed to add system metrics (nvme)")
+
+        try:
+            add_system_metrics_gps(args, messages)
+        except Exception:
+            logging.warning("failed to add system metrics (gps)")
 
         try:
             add_uptime_metrics(args, messages)
