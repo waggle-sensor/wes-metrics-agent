@@ -8,7 +8,7 @@ import time
 from collections import deque
 from os import getenv
 from pathlib import Path
-from queue import Empty, LifoQueue
+from queue import Empty, Queue
 from threading import Event, Thread
 from urllib.request import urlopen
 
@@ -19,8 +19,8 @@ from gpsdclient import GPSDClient
 from prometheus_client.parser import text_string_to_metric_families
 from pySMART import Device
 
-tegrastats_queue = LifoQueue()
-jetsonclocks_queue = LifoQueue()
+tegrastats_queue = Queue()
+jetsonclocks_queue = Queue()
 # used to signal threads to terminate
 stop_event = Event()
 watched_signals = [signal.SIGINT, signal.SIGTERM]
@@ -116,8 +116,8 @@ def tegrastats_worker(interval):
     except FileNotFoundError:
         # we are most likely not running on a jetson device
         logging.warning("'tegrastats' not found, skipping tegrastats collection")
-
-    logging.info("stopped tegrastats worker")
+    finally:
+        logging.info("stopped tegrastats worker")
 
 
 def add_system_metrics_tegra(args, messages):
@@ -130,7 +130,7 @@ def add_system_metrics_tegra(args, messages):
     logging.info("collecting system metrics (tegra)")
 
     # process all queued tegrastats
-    while not tegrastats_queue.empty():
+    while True:
         try:
             timestamp, tegradata = tegrastats_queue.get(block=False)
             logging.debug(
@@ -204,7 +204,7 @@ def add_system_metrics_tegra(args, messages):
                 )
 
         except Empty:
-            continue
+            break
         except Exception:
             logging.exception("failed to get tegra system metrics")
 
@@ -268,7 +268,7 @@ def add_system_metrics_jetson_clocks(args, messages):
     logging.info("collecting system metrics (Jetson Clocks)")
 
     # process all queued jetson clocks
-    while not jetsonclocks_queue.empty():
+    while True:
         try:
             timestamp, pdata = jetsonclocks_queue.get(block=False)
             logging.debug(
@@ -317,7 +317,7 @@ def add_system_metrics_jetson_clocks(args, messages):
                     )
 
         except Empty:
-            continue
+            break
         except Exception:
             logging.exception("failed to get jetson clock system metrics")
 
