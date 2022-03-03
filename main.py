@@ -9,7 +9,7 @@ from collections import deque
 from os import getenv
 from pathlib import Path
 from queue import Empty, Queue
-from threading import Event, Thread
+from threading import Thread
 from urllib.request import urlopen
 
 import pika
@@ -21,9 +21,6 @@ from pySMART import Device
 
 tegrastats_queue = Queue()
 jetsonclocks_queue = Queue()
-# used to signal threads to terminate
-stop_event = Event()
-watched_signals = [signal.SIGINT, signal.SIGTERM]
 
 
 def get_node_exporter_metrics(url):
@@ -103,16 +100,13 @@ def tegrastats_worker(interval):
             ["tegrastats", "--interval", f"{interval}"],
             stdout=subprocess.PIPE,
         ) as process:
-            while not stop_event.is_set():
+            while True:
                 output = process.stdout.readline()
                 if output:
                     line = output.strip().decode()
                     tegrastats_queue.put((time.time_ns(), line))
                     logging.debug(f"- added to tegrastats queue [size: {tegrastats_queue.qsize()}]")
                     logging.debug(line)
-
-            # stop event received, close subprocess and return
-            process.terminate()
     except FileNotFoundError:
         # we are most likely not running on a jetson device
         logging.warning("'tegrastats' not found, skipping tegrastats collection")
@@ -220,8 +214,6 @@ def jetson_clocks_worker(interval):
     sch = sched.scheduler(time.time, time.sleep)
 
     def jetson_clocks_runner(delay):
-        if stop_event.is_set():
-            return
         logging.debug("- scheduling next jetson_clocks to start in %s seconds", int(delay))
         future_event = sch.enter(delay, 0, jetson_clocks_runner, kwargs={"delay": delay})
 
@@ -244,16 +236,9 @@ def jetson_clocks_worker(interval):
         logging.debug(f"- added to jetson_clocks queue [size: {jetsonclocks_queue.qsize()}]")
         logging.debug(pdata)
 
-        if stop_event.is_set():
-            try:
-                sch.cancel(future_event)
-            except Exception:
-                # pass as the future event run will simply return
-                pass
-
     sch.enter(interval, 0, jetson_clocks_runner, kwargs={"delay": interval})
 
-    # wait here until all schedules finish (i.e. stop_event triggered)
+    # wait here until all schedules finish (i.e. run forever)
     sch.run()
     logging.info("stopped jetson_clocks worker")
 
@@ -572,11 +557,6 @@ def flush_messages_to_rabbitmq(args, messages):
     logging.info("published %d metrics", published_total)
 
 
-def handle_signals(sig, frame):
-    logging.info(f"Termination signal [{sig}] caught, signaling worker threads to stop..")
-    stop_event.set()
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="enable debug logs")
@@ -659,20 +639,15 @@ def main():
 
     logging.info("metrics agent started on %s", args.waggle_host_id)
 
-    # setup signal handlers
-    for sig in watched_signals:
-        logging.info(f"setting signal handler for signal [{sig}]")
-        signal.signal(sig, handle_signals)
-
     messages = deque()
 
     logging.info("starting threaded processes")
     tegra_thread = Thread(
-        target=tegrastats_worker, args=(args.metrics_collect_interval,), daemon=False
+        target=tegrastats_worker, args=(args.metrics_collect_interval,), daemon=True
     )
     tegra_thread.start()
     jetson_thread = Thread(
-        target=jetson_clocks_worker, args=(args.metrics_collect_interval,), daemon=False
+        target=jetson_clocks_worker, args=(args.metrics_collect_interval,), daemon=True
     )
     jetson_thread.start()
 
@@ -684,10 +659,8 @@ def main():
     sch = sched.scheduler(time.time, time.sleep)
 
     def main_runner(delay):
-        if stop_event.is_set():
-            return
         logging.info("scheduling next metrics collection to start in %s seconds", int(delay))
-        future_event = sch.enter(delay, 0, main_runner, kwargs={"delay": delay})
+        sch.enter(delay, 0, main_runner, kwargs={"delay": delay})
 
         logging.info("starting metrics collection")
         try:
@@ -729,25 +702,14 @@ def main():
 
         logging.info("finished metrics collection")
 
-        if stop_event.is_set():
-            try:
-                sch.cancel(future_event)
-            except Exception:
-                # pass as the future event run will simply return
-                pass
-
     sch.enter(
         args.metrics_collect_interval,
         0,
         main_runner,
         kwargs={"delay": args.metrics_collect_interval},
     )
-    # wait here until all schedules finish (i.e. stop_event triggered)
+    # wait here until all schedules finish (i.e. run forever)
     sch.run()
-
-    # wait for the threads to finish
-    tegra_thread.join(args.metrics_collect_interval * 2)
-    jetson_thread.join(args.metrics_collect_interval * 2)
 
 
 if __name__ == "__main__":
