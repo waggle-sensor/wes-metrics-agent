@@ -540,6 +540,13 @@ def flush_messages_to_rabbitmq(args, messages):
 
     published_total = 0
 
+    logging.info(f"messages [{len(messages)}]")
+    while len(messages) > 0:
+        msg = messages[0]
+        logging.info(f"-{message.dump(msg)}")
+        messages.popleft()
+    return
+
     try:
         with pika.BlockingConnection(params) as connection:
             channel = connection.channel()
