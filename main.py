@@ -53,6 +53,10 @@ prom2waggle = {
     "node_memory_MemAvailable_bytes": "sys.mem.avail",
     "node_memory_MemFree_bytes": "sys.mem.free",
     "node_memory_MemTotal_bytes": "sys.mem.total",
+    # swap
+    "node_memory_SwapCached_bytes": "sys.mem.swap.cached",
+    "node_memory_SwapFree_bytes": "sys.mem.swap.free",
+    "node_memory_SwapTotal_bytes": "sys.mem.swap.total",
     # fs
     "node_filesystem_avail_bytes": "sys.fs.avail",
     "node_filesystem_size_bytes": "sys.fs.size",
