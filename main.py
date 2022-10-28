@@ -53,6 +53,45 @@ prom2waggle = {
     "node_memory_MemAvailable_bytes": "sys.mem.avail",
     "node_memory_MemFree_bytes": "sys.mem.free",
     "node_memory_MemTotal_bytes": "sys.mem.total",
+    # Mem Buffers and Cache
+    "node_memory_Buffers_bytes": "sys.mem.buffers",
+    "node_memory_Cached_bytes":  "sys.mem.cached",
+    # Memory Activeness
+    "node_memory_Active_bytes": "sys.mem.active",
+    "node_memory_Active_anon_bytes": "sys.mem.active.anon",
+    "node_memory_Active_file_bytes": "sys.mem.active.file",
+    "node_memory_Inactive_bytes": "sys.mem.inactive",
+    "node_memory_Inactive_anon_bytes": "sys.mem.inactive.anon",
+    "node_memory_Inactive_file_bytes": "sys.mem.inactive.file",
+    # Mem writeback Into the Disk
+    "node_memory_Dirty_bytes": "sys.mem.dirty",
+    "node_memory_Writeback_bytes": "sys.mem.writeback",
+    "node_memory_WritebackTmp_bytes": "sys.mem.writebacktmp",
+    # Mapped memory
+    "node_memory_AnonPages_bytes": "sys.mem.anon_pages",
+    "node_memory_Mapped_bytes": "sys.mem.mapped",
+    # Shared memory
+    "node_memory_Shmem_bytes": "sys.mem.shared",
+    # Kernel memory
+    "node_memory_Slab_bytes": "sys.mem.slab",
+    "node_memory_SReclaimable_bytes": "sys.mem.sreclaimable",
+    "node_memory_SUnreclaim_bytes": "sys.mem.sunreclaim",
+    "node_memory_KernelStack_bytes": "sys.mem.kernel_stack",
+    # Allocation Mem Availability
+    "node_memory_CommitLimit_bytes": "sys.mem.commit_limit",
+    "node_memory_Committed_AS_bytes": "sys.mem.committed_as",
+    # Virtual Memory
+    "node_memory_PageTables_bytes": "sys.mem.page_tables",
+    "node_memory_VmallocTotal_bytes": "sys.mem.vmalloc_total",
+    "node_memory_VmallocUsed_bytes": "sys.mem.vmalloc_used",
+    "node_memory_VmallocChunk_bytes": "sys.mem.vmalloc_chunk",
+    # Others mem parameters
+    "node_memory_Unevictable_bytes": "sys.mem.unevictable",
+    "node_memory_Mlocked_bytes": "sys.mem.mlocked",
+    "node_memory_NFS_Unstable_bytes": "sys.mem.nfs_unstable",
+    "node_memory_Bounce_bytes": "sys.mem.bounce",
+    "node_memory_CmaFree_bytes": "sys.mem.cma_free",
+    "node_memory_CmaTotal_bytes": "sys.mem.cma_total",
     # fs
     "node_filesystem_avail_bytes": "sys.fs.avail",
     "node_filesystem_size_bytes": "sys.fs.size",
