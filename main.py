@@ -92,6 +92,10 @@ prom2waggle = {
     "node_memory_Bounce_bytes": "sys.mem.bounce",
     "node_memory_CmaFree_bytes": "sys.mem.cma_free",
     "node_memory_CmaTotal_bytes": "sys.mem.cma_total",
+    # swap
+    "node_memory_SwapCached_bytes": "sys.mem.swap.cached",
+    "node_memory_SwapFree_bytes": "sys.mem.swap.free",
+    "node_memory_SwapTotal_bytes": "sys.mem.swap.total",
     # fs
     "node_filesystem_avail_bytes": "sys.fs.avail",
     "node_filesystem_size_bytes": "sys.fs.size",
