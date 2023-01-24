@@ -440,6 +440,7 @@ def add_system_metrics_gps(args, messages):
         logging.exception("failed to get gps system metrics")
 
 
+@timeout_decorator.timeout(10)
 def add_system_metrics(args, messages):
     timestamp = time.time_ns()
 
