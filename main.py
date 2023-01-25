@@ -738,7 +738,7 @@ def main():
         flush_messages_to_rabbitmq(args, messages)
 
         # touch health file for liveness prob
-        Path.touch("/tmp/healthy")
+        Path("/tmp/healthy").touch()
 
         logging.info("finished metrics collection")
 
