@@ -542,6 +542,53 @@ def add_metrics_data_dir(args, messages):
             # this metric will keep getting queued up
             path.unlink()
 
+@timeout_decorator.timeout(10)
+def add_chirpstack_server_metrics(args, messages):
+    """Collect and publish Prometheus metrics from the ChirpStack server."""
+    timestamp = time.time_ns()
+    
+    logging.info("collecting ChirpStack server metrics from %s", args.chirpstack_metrics_url)
+    text = get_node_exporter_metrics(args.chirpstack_metrics_url)
+        
+    for family in text_string_to_metric_families(text):
+        for sample in family.samples:
+            try:
+                name = prom2waggle[sample.name]
+            except KeyError:
+                continue
+           
+            messages.append(
+                message.Message(
+                    name=name,
+                    value=sample.value,
+                    timestamp=timestamp,
+                    meta=sample.labels,
+                )
+            )
+
+@timeout_decorator.timeout(10)
+def add_chirpstack_gateway_bridge_metrics(args, messages):
+    """Collect and publish Prometheus metrics from the ChirpStack gateway bridge."""
+    timestamp = time.time_ns()
+
+    logging.info("collecting ChirpStack gateway bridge metrics from %s", args.chirpstack_gateway_metrics_url)
+    text = get_node_exporter_metrics(args.chirpstack_gateway_metrics_url)
+
+    for family in text_string_to_metric_families(text):
+        for sample in family.samples:
+            try:
+                name = prom2waggle[sample.name]
+            except KeyError:
+                continue
+
+            messages.append(
+                message.Message(
+                    name=name,
+                    value=sample.value,
+                    timestamp=timestamp,
+                    meta=sample.labels,
+                )
+            )
 
 def flush_messages_to_rabbitmq(args, messages):
     if len(messages) == 0:
@@ -664,6 +711,16 @@ def main():
         type=Path,
         help="metrics data directory",
     )
+    parser.add_argument(
+        "--chirpstack-metrics-url",
+        default=getenv("CHIRPSTACK_METRICS_URL", "http://wes-chirpstack-server:9100/metrics"),
+        help="chirpstack server metrics url",
+    )
+    parser.add_argument(
+        "--chirpstack-gateway-metrics-url",
+        default=getenv("CHIRPSTACK_GATEWAY_METRICS_URL", "http://wes-chirpstack-gateway-bridge:9100/metrics"),
+        help="chirpstack gateway bridge metrics url",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -734,6 +791,16 @@ def main():
             add_uptime_metrics(args, messages)
         except Exception:
             logging.warning("failed to add uptime metrics")
+
+        try:
+            add_chirpstack_server_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack server metrics")
+
+        try:
+            add_chirpstack_gateway_bridge_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack gateway bridge metrics")
 
         flush_messages_to_rabbitmq(args, messages)
 
