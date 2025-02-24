@@ -110,6 +110,27 @@ prom2waggle = {
     "node_hwmon_temp_celsius": "sys.hwmon",
     "node_cooling_device_cur_state": "sys.cooling",
     "node_cooling_device_max_state": "sys.cooling_max",
+    # ChirpStack Gateway Bridge (lorawan gateway)
+        # HELP The percentage of upstream datagrams that were acknowledged.
+        # TYPE gauge
+    "backend_semtechdup_gateway_ack_rate": "lora.gateway.ack_rate",
+        # HELP The number of ack-rates reported.
+        # TYPE counter
+    "backend_semtechudp_gateway_ack_rate_count": "lora.gateway.ack_rate_count",
+        # HELP The number of gateway connections received by the backend.
+        # TYPE counter
+    "backend_semtechudp_gateway_connect_count": "lora.gateway.connect_count",
+        # HELP The number of gateways that disconnected from the backend.
+        # TYPE counter
+    "backend_semtechudp_gateway_diconnect_count": "lora.gateway.disconnect_count",
+        # HELP The number of UDP packets received by the backend (per packet_type).
+        # TYPE counter
+    "backend_semtechudp_udp_received_count": "lora.gateway.udp_received_count",
+        # HELP The number of UDP packets sent by the backend (per packet_type).
+        # TYPE counter
+    "backend_semtechudp_udp_sent_count": "lora.gateway.udp_sent_count",
+    # ChirpStack Server (lorawan network server)
+    #TODO: left off here - flozano 2024-02-24
 }
 
 # mapping of gps metric to it's error estimate key
