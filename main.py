@@ -760,6 +760,11 @@ def main():
         default=getenv("CHIRPSTACK_GATEWAY_METRICS_URL", "http://wes-chirpstack-gateway-bridge:9100/metrics"),
         help="chirpstack gateway bridge metrics url",
     )
+    parser.add_argument(
+        "--resource-lorawan",
+        default=getenv("RESOURCE_LORAWAN", "false"),
+        help="Set to 'true' if this node has resource.lorawan=true and should publish ChirpStack metrics"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -831,15 +836,19 @@ def main():
         except Exception:
             logging.warning("failed to add uptime metrics")
 
-        try:
-            add_chirpstack_server_metrics(args, messages)
-        except Exception:
-            logging.warning("failed to add ChirpStack server metrics")
+        # Only publish ChirpStack metrics if this node has resource.lorawan=true
+        if args.resource_lorawan.lower() == "true":
+            try:
+                add_chirpstack_server_metrics(args, messages)
+            except Exception:
+                logging.warning("failed to add ChirpStack server metrics")
 
-        try:
-            add_chirpstack_gateway_bridge_metrics(args, messages)
-        except Exception:
-            logging.warning("failed to add ChirpStack gateway bridge metrics")
+            try:
+                add_chirpstack_gateway_bridge_metrics(args, messages)
+            except Exception:
+                logging.warning("failed to add ChirpStack gateway bridge metrics")
+        else:
+            logging.debug("Skipping ChirpStack metrics, node does not have label resource.lorawan=true")
 
         flush_messages_to_rabbitmq(args, messages)
 
