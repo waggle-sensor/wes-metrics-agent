@@ -780,11 +780,6 @@ def main():
         default=getenv("CHIRPSTACK_GATEWAY_METRICS_URL", "http://wes-chirpstack-gateway-bridge:9100/metrics"),
         help="chirpstack gateway bridge metrics url",
     )
-    parser.add_argument(
-        "--resource-lorawan",
-        default=getenv("RESOURCE_LORAWAN", "false"),
-        help="Set to 'true' if this node has resource.lorawan=true and should publish ChirpStack metrics"
-    )
     args = parser.parse_args()
 
     logging.basicConfig(
