@@ -125,19 +125,19 @@ prom2waggle = {
     "backend_semtechdup_gateway_ack_rate": "sys.lora.gateway.ack_rate",
         # HELP The number of ack-rates reported.
         # TYPE counter
-    "backend_semtechudp_gateway_ack_rate_count": "sys.lora.gateway.ack_rate_count",
+    "backend_semtechudp_gateway_ack_rate_count_total": "sys.lora.gateway.ack_rate_count",
         # HELP The number of gateway connections received by the backend.
         # TYPE counter
-    "backend_semtechudp_gateway_connect_count": "sys.lora.gateway.connect_count",
+    "backend_semtechudp_gateway_connect_count_total": "sys.lora.gateway.connect_count",
         # HELP The number of gateways that disconnected from the backend.
         # TYPE counter
-    "backend_semtechudp_gateway_diconnect_count": "sys.lora.gateway.disconnect_count",
+    "backend_semtechudp_gateway_diconnect_count_total": "sys.lora.gateway.disconnect_count",
         # HELP The number of UDP packets received by the backend (per packet_type).
         # TYPE counter
-    "backend_semtechudp_udp_received_count": "sys.lora.gateway.udp_received_count",
+    "backend_semtechudp_udp_received_count_total": "sys.lora.gateway.udp_received_count",
         # HELP The number of UDP packets sent by the backend (per packet_type).
         # TYPE counter
-    "backend_semtechudp_udp_sent_count": "sys.lora.gateway.udp_sent_count",
+    "backend_semtechudp_udp_sent_count_total": "sys.lora.gateway.udp_sent_count",
     # ChirpStack Server (lorawan network server)
         # HELP gateway_backend_mqtt_events Number of events received.
         # TYPE gateway_backend_mqtt_events counter
