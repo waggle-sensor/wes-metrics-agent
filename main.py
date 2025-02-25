@@ -679,9 +679,7 @@ def flush_messages_to_rabbitmq(args, messages):
                 msg = messages[0]
                 # tag message with node and host metadata
                 msg.meta["node"] = args.waggle_node_id
-                # For non-ChirpStack metrics, add host metadata.
-                if not msg.name.startswith("sys.lora"):
-                    msg.meta["host"] = args.waggle_host_id
+                msg.meta["host"] = args.waggle_host_id
                 if args.waggle_node_vsn != "":
                     msg.meta["vsn"] = args.waggle_node_vsn
                 # add to rabbitmq queue
