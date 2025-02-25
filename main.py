@@ -846,7 +846,7 @@ def main():
             logging.warning("failed to add uptime metrics")
 
         # Only publish ChirpStack metrics on core node
-        if "core" in args.waggle_host_id.lower().contains() :
+        if "core" in args.waggle_host_id.lower():
             try:
                 add_chirpstack_server_metrics(args, messages)
             except Exception:
