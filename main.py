@@ -490,6 +490,7 @@ def add_system_metrics(args, messages):
             try:
                 name = prom2waggle[sample.name]
             except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
                 continue
 
             messages.append(
@@ -602,6 +603,7 @@ def add_chirpstack_server_metrics(args, messages):
             try:
                 name = prom2waggle[sample.name]
             except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
                 continue
            
             messages.append(
@@ -635,6 +637,7 @@ def add_chirpstack_gateway_bridge_metrics(args, messages):
             try:
                 name = prom2waggle[sample.name]
             except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
                 continue
 
             messages.append(
