@@ -11,6 +11,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from urllib.request import urlopen
+from urllib.error import URLError
 
 import pika
 import timeout_decorator
@@ -32,7 +33,7 @@ def get_prometheus_metrics(url):
     Returns:
         the metrics as a string
     """
-    with urlopen(url) as f:
+    with urlopen(url, timeout=3) as f:
         return f.read().decode()
 
 
@@ -585,7 +586,11 @@ def add_chirpstack_server_metrics(args, messages):
     timestamp = time.time_ns()
     
     logging.info("collecting ChirpStack server metrics from %s", args.chirpstack_metrics_url)
-    text = get_prometheus_metrics(args.chirpstack_metrics_url)
+    try:
+        text = get_prometheus_metrics(args.chirpstack_metrics_url)
+    except URLError as e:
+        logging.warning("Could not connect to ChirpStack server service: %s", e.reason)
+        return
         
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
@@ -609,7 +614,11 @@ def add_chirpstack_gateway_bridge_metrics(args, messages):
     timestamp = time.time_ns()
 
     logging.info("collecting ChirpStack gateway bridge metrics from %s", args.chirpstack_gateway_metrics_url)
-    text = get_prometheus_metrics(args.chirpstack_gateway_metrics_url)
+    try:
+        text = get_prometheus_metrics(args.chirpstack_gateway_metrics_url)
+    except URLError as e:
+        logging.warning("Could not connect to ChirpStack gateway bridge service: %s", e.reason)
+        return
 
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
@@ -836,8 +845,8 @@ def main():
         except Exception:
             logging.warning("failed to add uptime metrics")
 
-        # Only publish ChirpStack metrics if this node has resource.lorawan=true
-        if args.resource_lorawan.lower() == "true":
+        # Only publish ChirpStack metrics on core node
+        if "core" in args.waggle_host_id.lower().contains() :
             try:
                 add_chirpstack_server_metrics(args, messages)
             except Exception:
@@ -848,7 +857,7 @@ def main():
             except Exception:
                 logging.warning("failed to add ChirpStack gateway bridge metrics")
         else:
-            logging.debug("Skipping ChirpStack metrics, node does not have label resource.lorawan=true")
+            logging.debug("Skipping ChirpStack metrics, node is not core")
 
         flush_messages_to_rabbitmq(args, messages)
 
