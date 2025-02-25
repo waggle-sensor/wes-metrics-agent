@@ -23,7 +23,15 @@ tegrastats_queue = Queue()
 jetsonclocks_queue = Queue()
 
 
-def get_node_exporter_metrics(url):
+def get_prometheus_metrics(url):
+    """
+    Fetches the prometheus metrics from the url.
+
+    Args:
+        url: the url of the prometheus metrics endpoint
+    Returns:
+        the metrics as a string
+    """
     with urlopen(url) as f:
         return f.read().decode()
 
@@ -474,7 +482,7 @@ def add_system_metrics(args, messages):
     timestamp = time.time_ns()
 
     logging.info("collecting system metrics from %s", args.metrics_url)
-    text = get_node_exporter_metrics(args.metrics_url)
+    text = get_prometheus_metrics(args.metrics_url)
 
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
@@ -577,7 +585,7 @@ def add_chirpstack_server_metrics(args, messages):
     timestamp = time.time_ns()
     
     logging.info("collecting ChirpStack server metrics from %s", args.chirpstack_metrics_url)
-    text = get_node_exporter_metrics(args.chirpstack_metrics_url)
+    text = get_prometheus_metrics(args.chirpstack_metrics_url)
         
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
@@ -601,7 +609,7 @@ def add_chirpstack_gateway_bridge_metrics(args, messages):
     timestamp = time.time_ns()
 
     logging.info("collecting ChirpStack gateway bridge metrics from %s", args.chirpstack_gateway_metrics_url)
-    text = get_node_exporter_metrics(args.chirpstack_gateway_metrics_url)
+    text = get_prometheus_metrics(args.chirpstack_gateway_metrics_url)
 
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
