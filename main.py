@@ -586,6 +586,11 @@ def add_chirpstack_server_metrics(args, messages):
     timestamp = time.time_ns()
     
     logging.info("collecting ChirpStack server metrics from %s", args.chirpstack_metrics_url)
+
+    if "nxcore" not in args.waggle_host_id:
+        logging.warning("skipping ChirpStack server publish for non-main host (%s)", args.waggle_host_id)
+        return
+
     try:
         text = get_prometheus_metrics(args.chirpstack_metrics_url)
     except URLError as e:
@@ -614,6 +619,11 @@ def add_chirpstack_gateway_bridge_metrics(args, messages):
     timestamp = time.time_ns()
 
     logging.info("collecting ChirpStack gateway bridge metrics from %s", args.chirpstack_gateway_metrics_url)
+
+    if "nxcore" not in args.waggle_host_id:
+        logging.warning("skipping ChirpStack gateway bridge publish for non-main host (%s)", args.waggle_host_id)
+        return
+
     try:
         text = get_prometheus_metrics(args.chirpstack_gateway_metrics_url)
     except URLError as e:
@@ -845,19 +855,15 @@ def main():
         except Exception:
             logging.warning("failed to add uptime metrics")
 
-        # Only publish ChirpStack metrics on core node
-        if "core" in args.waggle_host_id.lower():
-            try:
-                add_chirpstack_server_metrics(args, messages)
-            except Exception:
-                logging.warning("failed to add ChirpStack server metrics")
+        try:
+            add_chirpstack_server_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack server metrics")
 
-            try:
-                add_chirpstack_gateway_bridge_metrics(args, messages)
-            except Exception:
-                logging.warning("failed to add ChirpStack gateway bridge metrics")
-        else:
-            logging.debug("Skipping ChirpStack metrics, node is not core")
+        try:
+            add_chirpstack_gateway_bridge_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack gateway bridge metrics")
 
         flush_messages_to_rabbitmq(args, messages)
 
