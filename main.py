@@ -11,6 +11,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from urllib.request import urlopen
+from urllib.error import URLError
 
 import pika
 import timeout_decorator
@@ -23,8 +24,16 @@ tegrastats_queue = Queue()
 jetsonclocks_queue = Queue()
 
 
-def get_node_exporter_metrics(url):
-    with urlopen(url) as f:
+def get_prometheus_metrics(url):
+    """
+    Fetches the prometheus metrics from the url.
+
+    Args:
+        url: the url of the prometheus metrics endpoint
+    Returns:
+        the metrics as a string
+    """
+    with urlopen(url, timeout=3) as f:
         return f.read().decode()
 
 
@@ -110,6 +119,35 @@ prom2waggle = {
     "node_hwmon_temp_celsius": "sys.hwmon",
     "node_cooling_device_cur_state": "sys.cooling",
     "node_cooling_device_max_state": "sys.cooling_max",
+    # ChirpStack Gateway Bridge (lorawan gateway)
+        # HELP The percentage of upstream datagrams that were acknowledged.
+        # TYPE gauge
+    "backend_semtechdup_gateway_ack_rate": "sys.lora.gateway.ack_rate",
+        # HELP The number of ack-rates reported.
+        # TYPE counter
+    "backend_semtechudp_gateway_ack_rate_count_total": "sys.lora.gateway.ack_rate_count",
+        # HELP The number of gateway connections received by the backend.
+        # TYPE counter
+    "backend_semtechudp_gateway_connect_count_total": "sys.lora.gateway.connect_count",
+        # HELP The number of gateways that disconnected from the backend.
+        # TYPE counter
+    "backend_semtechudp_gateway_diconnect_count_total": "sys.lora.gateway.disconnect_count",
+        # HELP The number of UDP packets received by the backend (per packet_type).
+        # TYPE counter
+    "backend_semtechudp_udp_received_count_total": "sys.lora.gateway.udp_received_count",
+        # HELP The number of UDP packets sent by the backend (per packet_type).
+        # TYPE counter
+    "backend_semtechudp_udp_sent_count_total": "sys.lora.gateway.udp_sent_count",
+    # ChirpStack Server (lorawan network server)
+        # HELP gateway_backend_mqtt_events Number of events received.
+        # TYPE gateway_backend_mqtt_events counter
+    "gateway_backend_mqtt_events_total": "sys.lora.server.gateway_backend_mqtt_events",
+        # HELP uplink_count Number of received uplinks (after deduplication).
+        # TYPE uplink_count counter
+    "uplink_count_total": "sys.lora.server.uplink_count",
+        # HELP gateway_backend_mqtt_commands Number of commands sent.
+        # TYPE gateway_backend_mqtt_commands counter,
+    "gateway_backend_mqtt_commands_total": "sys.lora.server.gateway_backend_mqtt_commands",
 }
 
 # mapping of gps metric to it's error estimate key
@@ -445,13 +483,14 @@ def add_system_metrics(args, messages):
     timestamp = time.time_ns()
 
     logging.info("collecting system metrics from %s", args.metrics_url)
-    text = get_node_exporter_metrics(args.metrics_url)
+    text = get_prometheus_metrics(args.metrics_url)
 
     for family in text_string_to_metric_families(text):
         for sample in family.samples:
             try:
                 name = prom2waggle[sample.name]
             except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
                 continue
 
             messages.append(
@@ -542,6 +581,73 @@ def add_metrics_data_dir(args, messages):
             # this metric will keep getting queued up
             path.unlink()
 
+@timeout_decorator.timeout(10)
+def add_chirpstack_server_metrics(args, messages):
+    """Collect and publish Prometheus metrics from the ChirpStack server."""
+    timestamp = time.time_ns()
+    
+    logging.info("collecting ChirpStack server metrics from %s", args.chirpstack_metrics_url)
+
+    if "nxcore" not in args.waggle_host_id:
+        logging.warning("skipping ChirpStack server publish for non-main host (%s)", args.waggle_host_id)
+        return
+
+    try:
+        text = get_prometheus_metrics(args.chirpstack_metrics_url)
+    except URLError as e:
+        logging.warning("Could not connect to ChirpStack server service: %s", e.reason)
+        return
+        
+    for family in text_string_to_metric_families(text):
+        for sample in family.samples:
+            try:
+                name = prom2waggle[sample.name]
+            except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
+                continue
+           
+            messages.append(
+                message.Message(
+                    name=name,
+                    value=sample.value,
+                    timestamp=timestamp,
+                    meta=sample.labels,
+                )
+            )
+
+@timeout_decorator.timeout(10)
+def add_chirpstack_gateway_bridge_metrics(args, messages):
+    """Collect and publish Prometheus metrics from the ChirpStack gateway bridge."""
+    timestamp = time.time_ns()
+
+    logging.info("collecting ChirpStack gateway bridge metrics from %s", args.chirpstack_gateway_metrics_url)
+
+    if "nxcore" not in args.waggle_host_id:
+        logging.warning("skipping ChirpStack gateway bridge publish for non-main host (%s)", args.waggle_host_id)
+        return
+
+    try:
+        text = get_prometheus_metrics(args.chirpstack_gateway_metrics_url)
+    except URLError as e:
+        logging.warning("Could not connect to ChirpStack gateway bridge service: %s", e.reason)
+        return
+
+    for family in text_string_to_metric_families(text):
+        for sample in family.samples:
+            try:
+                name = prom2waggle[sample.name]
+            except KeyError:
+                logging.debug("skipping metric %s, it is not in prom2waggle", sample.name)
+                continue
+
+            messages.append(
+                message.Message(
+                    name=name,
+                    value=sample.value,
+                    timestamp=timestamp,
+                    meta=sample.labels,
+                )
+            )
 
 def flush_messages_to_rabbitmq(args, messages):
     if len(messages) == 0:
@@ -664,6 +770,16 @@ def main():
         type=Path,
         help="metrics data directory",
     )
+    parser.add_argument(
+        "--chirpstack-metrics-url",
+        default=getenv("CHIRPSTACK_METRICS_URL", "http://wes-chirpstack-server:9100/metrics"),
+        help="chirpstack server metrics url",
+    )
+    parser.add_argument(
+        "--chirpstack-gateway-metrics-url",
+        default=getenv("CHIRPSTACK_GATEWAY_METRICS_URL", "http://wes-chirpstack-gateway-bridge:9100/metrics"),
+        help="chirpstack gateway bridge metrics url",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -734,6 +850,16 @@ def main():
             add_uptime_metrics(args, messages)
         except Exception:
             logging.warning("failed to add uptime metrics")
+
+        try:
+            add_chirpstack_server_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack server metrics")
+
+        try:
+            add_chirpstack_gateway_bridge_metrics(args, messages)
+        except Exception:
+            logging.warning("failed to add ChirpStack gateway bridge metrics")
 
         flush_messages_to_rabbitmq(args, messages)
 
